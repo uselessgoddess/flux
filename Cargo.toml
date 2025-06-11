@@ -3,11 +3,35 @@ name = "flux"
 version = "0.0.0"
 edition = "2024"
 
-[dependencies]
-bevy = { version = "0.16" }
+[workspace]
+members = ["crates/harness"]
 
-salva3d = { version = "0.9", features = ["parallel", "rapier"] }
-rapier3d = { package = "bevy_rapier3d", version = "0.30", features = ["parallel", "simd-stable"] }
+[dependencies.salva]
+package = "salva3d"
+git = "https://github.com/dimforge/salva"
+features = ["sampling", "rapier-harness"]
+
+[dependencies.rapier]
+package = "rapier3d"
+version = "0.23"
+features = ["simd-stable", "debug-render", "serde-serialize"]
+
+[dependencies.rapier_testbed3d]
+version = "0.23"
+features = ["parallel"]
+
+[dependencies]
+bevy = { version = "0.16", features = ["serialize"] }
+panorbit_camera = { package = "bevy_panorbit_camera", version = "0.26" }
+
+nalgebra = { version = "0.33", features = ["rand", "glam029"] }
+instant = "0.1.13"
+
+harness = { path = "crates/harness" }
+
+[features]
+default = ["parallel"]
+parallel = ["harness/parallel"]
 
 [profile.dev]
 opt-level = 1
