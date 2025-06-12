@@ -1,13 +1,23 @@
 use {
   crate::prelude::*,
-  harness::{Harness, PhysicsEvents, PhysicsState, RunState},
-  salva::{LiquidWorld, integrations::rapier::FluidsPipeline},
+  harness::{PhysicsEvents, PhysicsState, RunState, SharedSnapshot},
+  rapier::math::{Point, Real},
+  salva::{
+    LiquidWorld, integrations::rapier::FluidsPipeline, object::FluidHandle,
+  },
 };
 
 /// A user-defined callback executed at each frame.
 pub type FluidCallback = Box<
-  dyn FnMut(&mut PhysicsState, &PhysicsEvents, &mut FluidsPipeline, &RunState),
+  dyn FnMut(&mut PhysicsState, &PhysicsEvents, &mut FluidsPipeline, &RunState)
+    + Send,
 >;
+
+impl Default for FluidsPlugin {
+  fn default() -> Self {
+    Self::new()
+  }
+}
 
 /// A plugin for rendering fluids with the Rapier harness.
 pub struct FluidsPlugin {
@@ -30,6 +40,7 @@ impl FluidsPlugin {
   pub fn add_callback(
     &mut self,
     f: impl FnMut(&mut PhysicsState, &PhysicsEvents, &mut FluidsPipeline, &RunState)
+    + Send
     + 'static,
   ) {
     self.callbacks.push(Box::new(f))
@@ -46,7 +57,32 @@ impl FluidsPlugin {
   }
 }
 
+pub struct Fluid {
+  pub positions: Vec<Point<Real>>,
+}
+
+pub struct Snapshot {
+  pub fluids: Vec<(FluidHandle, Fluid)>,
+  pub particle_radius: f32,
+}
+
+impl harness::Snapshot for Snapshot {}
+
 impl harness::Plugin for FluidsPlugin {
+  fn snapshot(&self) -> SharedSnapshot {
+    use salva::object;
+
+    let fluid = |(handle, fluid): (FluidHandle, &object::Fluid)| {
+      (handle, Fluid { positions: fluid.positions.to_vec() })
+    };
+
+    let world = self.liquid_world();
+    SharedSnapshot::new(Snapshot {
+      fluids: world.fluids().iter().map(fluid).collect(),
+      particle_radius: world.particle_radius(),
+    })
+  }
+
   fn run_callbacks(
     &mut self,
     physics: &mut PhysicsState,
@@ -74,21 +110,4 @@ impl harness::Plugin for FluidsPlugin {
   }
 }
 
-impl stand::Plugin for FluidsPlugin {
-  fn draw(&mut self, gizmos: &mut Gizmos, _: &mut Harness) {
-    for (_, (_, fluid)) in self.liquid_world().fluids().iter().enumerate()
-    // .enumerate()
-    // .filter(|(i, _)| i % 100 == 0)
-    {
-      for particle in &fluid.positions {
-        gizmos.sphere(
-          Isometry3d::from_translation(Vec3::from_slice(
-            particle.coords.as_slice(),
-          )),
-          self.liquid_world().particle_radius(),
-          Color::srgb(0.0, 0.2, 0.65),
-        );
-      }
-    }
-  }
-}
+impl stand::Plugin for FluidsPlugin {}

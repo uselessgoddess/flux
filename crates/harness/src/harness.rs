@@ -13,7 +13,7 @@ use {
   },
 };
 
-use crate::{PhysicsEvents, PhysicsState};
+use crate::{PhysicsEvents, PhysicsState, SharedSnapshot};
 
 pub struct RunState {
   #[cfg(feature = "parallel")]
@@ -80,6 +80,8 @@ pub struct Harness {
 }
 
 pub trait Plugin {
+  fn snapshot(&self) -> SharedSnapshot;
+
   fn run_callbacks(
     &mut self,
     physics: &mut PhysicsState,
@@ -93,7 +95,7 @@ pub trait Plugin {
 }
 
 type Callbacks =
-  Vec<Box<dyn FnMut(&mut PhysicsState, &PhysicsEvents, &RunState)>>;
+  Vec<Box<dyn FnMut(&mut PhysicsState, &PhysicsEvents, &RunState) + Send>>;
 
 #[allow(dead_code)]
 impl Harness {
@@ -187,7 +189,7 @@ impl Harness {
   }
 
   pub fn add_callback<
-    F: FnMut(&mut PhysicsState, &PhysicsEvents, &RunState) + 'static,
+    F: FnMut(&mut PhysicsState, &PhysicsEvents, &RunState) + Send + 'static,
   >(
     &mut self,
     callback: F,
@@ -237,4 +239,15 @@ impl Harness {
       self.step();
     }
   }
+}
+
+pub struct PhysicsSnapshot {
+  pub timestep_id: usize,
+  pub broad_phase: DefaultBroadPhase,
+  pub narrow_phase: NarrowPhase,
+  pub island_manager: IslandManager,
+  pub bodies: RigidBodySet,
+  pub colliders: ColliderSet,
+  pub impulse_joints: ImpulseJointSet,
+  pub multibody_joints: MultibodyJointSet,
 }

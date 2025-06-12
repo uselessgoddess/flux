@@ -16,8 +16,9 @@ fn main() {
   let mut app = flux::app();
   app.add_systems(Startup, setup);
 
-  stand().plugin(&mut app);
+  let rx = stand().detach_thread();
 
+  Stand::plugin(&mut app, rx);
   app.run();
 }
 
@@ -36,7 +37,7 @@ fn stand() -> Stand {
   let impulse_joints = ImpulseJointSet::new();
   let multibody_joints = MultibodyJointSet::new();
 
-  let num = 50;
+  let num = 10;
   let rad = 0.2;
 
   let subdiv = 1.0 / (num as f32);
@@ -103,7 +104,7 @@ fn fluid_pipeline() -> FluidsPlugin {
   let mut fluids_pipeline =
     FluidsPipeline::new(PARTICLE_RADIUS, SMOOTHING_FACTOR);
 
-  let nparticles = 10;
+  let nparticles = 30;
   let custom_force1 = CustomForceField { origin: Point3::new(1.0, 0.0, 0.0) };
   let custom_force2 = CustomForceField { origin: Point3::new(-1.0, 0.0, 0.0) };
   let mut fluid =

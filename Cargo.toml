@@ -8,13 +8,13 @@ members = ["crates/harness"]
 
 [dependencies.salva]
 package = "salva3d"
-git = "https://github.com/dimforge/salva"
+path = "../salva/build/salva3d"
 features = ["sampling", "rapier-harness"]
 
 [dependencies.rapier]
 package = "rapier3d"
 version = "0.23"
-features = ["simd-stable", "debug-render", "serde-serialize"]
+features = ["debug-render", "serde-serialize"]
 
 [dependencies.rapier_testbed3d]
 version = "0.23"
@@ -27,6 +27,8 @@ panorbit_camera = { package = "bevy_panorbit_camera", version = "0.26" }
 nalgebra = { version = "0.33", features = ["rand", "glam029"] }
 instant = "0.1.13"
 
+crossbeam = { version = "0.8", default-features = false, features = ["std", "crossbeam-channel"] }
+bincode = { version = "2.0", features = ["serde"] }
 harness = { path = "crates/harness" }
 
 [features]
