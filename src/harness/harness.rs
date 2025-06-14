@@ -1,19 +1,16 @@
-use {
-  crossbeam::channel,
-  rapier::{
-    dynamics::{
-      CCDSolver, ImpulseJointSet, IntegrationParameters, IslandManager,
-      MultibodyJointSet, RigidBodySet,
-    },
-    geometry::{ColliderSet, DefaultBroadPhase, NarrowPhase},
-    math::{Real, Vector},
-    pipeline::{
-      ChannelEventCollector, PhysicsHooks, PhysicsPipeline, QueryPipeline,
-    },
+use rapier::{
+  dynamics::{
+    CCDSolver, ImpulseJointSet, IntegrationParameters, IslandManager,
+    MultibodyJointSet, RigidBodySet,
+  },
+  geometry::{ColliderSet, DefaultBroadPhase, NarrowPhase},
+  math::{Real, Vector},
+  pipeline::{
+    ChannelEventCollector, PhysicsHooks, PhysicsPipeline, QueryPipeline,
   },
 };
 
-use crate::{PhysicsEvents, PhysicsState, SharedSnapshot};
+use super::{PhysicsEvents, PhysicsState};
 
 pub struct RunState {
   #[cfg(feature = "parallel")]
@@ -80,7 +77,9 @@ pub struct Harness {
 }
 
 pub trait Plugin {
-  fn snapshot(&self) -> SharedSnapshot;
+  type Snapshot;
+
+  fn snapshot(&self) -> Self::Snapshot;
 
   fn run_callbacks(
     &mut self,
@@ -100,6 +99,8 @@ type Callbacks =
 #[allow(dead_code)]
 impl Harness {
   pub fn new_empty() -> Self {
+    use crossbeam::channel;
+
     let (collisions, contacts) = (channel::unbounded(), channel::unbounded());
     let physics = PhysicsState::new();
     let state = RunState::new();
@@ -197,7 +198,7 @@ impl Harness {
     self.callbacks.push(Box::new(callback));
   }
 
-  #[profiling::function]
+  // #[profiling::function]
   pub fn step(&mut self) {
     let Self { event_handler, physics, .. } = self;
     let mut step = || {
@@ -239,15 +240,4 @@ impl Harness {
       self.step();
     }
   }
-}
-
-pub struct PhysicsSnapshot {
-  pub timestep_id: usize,
-  pub broad_phase: DefaultBroadPhase,
-  pub narrow_phase: NarrowPhase,
-  pub island_manager: IslandManager,
-  pub bodies: RigidBodySet,
-  pub colliders: ColliderSet,
-  pub impulse_joints: ImpulseJointSet,
-  pub multibody_joints: MultibodyJointSet,
 }

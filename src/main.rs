@@ -1,6 +1,6 @@
 #![feature(let_chains)]
 
-use flux::prelude::*;
+use {flux::prelude::*, std::num::NonZero};
 
 use rapier::{
   dynamics::{
@@ -10,7 +10,18 @@ use rapier::{
   prelude::*,
 };
 
-use harness::Harness;
+use salva::{
+  integrations::rapier::{ColliderSampling, FluidsPipeline},
+  object::{Boundary, Fluid, interaction_groups::InteractionGroups},
+  sampling,
+  solver::ArtificialViscosity,
+};
+
+use {
+  flux::harness::Fluids,
+  harness::Harness,
+  nalgebra::{Isometry3, Point3, Vector3},
+};
 
 fn main() {
   let mut app = flux::app();
@@ -31,40 +42,68 @@ fn setup(mut commands: Commands) {
   ));
 }
 
+const PARTICLE_RADIUS: f32 = 0.05;
+const SMOOTHING_FACTOR: f32 = 2.0;
+
 fn stand() -> Stand {
   let mut bodies = RigidBodySet::new();
   let mut colliders = ColliderSet::new();
   let impulse_joints = ImpulseJointSet::new();
   let multibody_joints = MultibodyJointSet::new();
+  let mut fluids_pipeline =
+    FluidsPipeline::new(PARTICLE_RADIUS, SMOOTHING_FACTOR);
 
-  let num = 10;
-  let rad = 0.2;
+  let ground_thickness = 0.2;
+  let ground_half_width = 2.5;
 
-  let subdiv = 1.0 / (num as f32);
+  use salva::solver::{Becker2009Elasticity, XSPHViscosity};
 
-  for i in 0usize..num {
-    let (x, y) = (i as f32 * subdiv * std::f32::consts::PI * 2.0).sin_cos();
+  let elasticity: Becker2009Elasticity =
+    Becker2009Elasticity::new(500_000.0, 0.3, true);
+  let viscosity = XSPHViscosity::new(0.5, 1.0);
 
-    let rb = RigidBodyBuilder::dynamic()
-      .translation(vector![x, y, 0.0])
-      .linvel(vector![x * 10.0, y * 10.0, 0.0])
-      .angvel(Vector::z() * 100.0)
-      .linear_damping((i + 1) as f32 * subdiv * 10.0)
-      .angular_damping((num - i) as f32 * subdiv * 10.0);
-    let rb_handle = bodies.insert(rb);
+  let nparticles = 30;
+  let mut fluid =
+    cube_fluid(nparticles, nparticles, nparticles, PARTICLE_RADIUS, 1000.0);
+  fluid.nonpressure_forces.push(Box::new(elasticity));
+  fluid.nonpressure_forces.push(Box::new(viscosity));
+  fluid.transform_by(&Isometry3::translation(
+    0.0,
+    ground_thickness + nparticles as f32 * PARTICLE_RADIUS,
+    0.0,
+  ));
+  let viscosity = ArtificialViscosity::new(1.0, 0.0);
+  fluid.nonpressure_forces.push(Box::new(viscosity));
+  let _fluid_handle = fluids_pipeline.liquid_world.add_fluid(fluid);
 
-    let co = ColliderBuilder::cuboid(rad, rad, rad);
-    colliders.insert_with_parent(co, rb_handle, &mut bodies);
-  }
+  let ground_shape =
+    SharedShape::cuboid(ground_half_width, ground_thickness, ground_half_width);
+
+  let ground_body = RigidBodyBuilder::fixed().build();
+  let ground_handle = bodies.insert(ground_body);
+
+  let samples =
+    sampling::shape_volume_ray_sample(&*ground_shape, PARTICLE_RADIUS).unwrap();
+  let co = ColliderBuilder::new(ground_shape)
+    .position(Isometry3::translation(0.0, -10.0, 0.0))
+    .build();
+  let co_handle = colliders.insert_with_parent(co, ground_handle, &mut bodies);
+  let bo_handle = fluids_pipeline
+    .liquid_world
+    .add_boundary(Boundary::new(Vec::new(), InteractionGroups::default()));
+
+  fluids_pipeline.coupling.register_coupling(
+    bo_handle,
+    co_handle,
+    ColliderSampling::StaticSampling(samples),
+  );
 
   let mut harness =
     Harness::new(bodies, colliders, impulse_joints, multibody_joints);
-  harness.physics.gravity = Vector::zeros();
+  harness.integration_parameters_mut().dt = 1.0 / 200.0;
 
-  Stand::new(harness).add_plugin(fluid_pipeline())
+  Stand::new(harness, Fluids::from_pipeline(fluids_pipeline))
 }
-
-use nalgebra::Vector3;
 
 pub fn cube_fluid(
   ni: usize,
@@ -93,60 +132,4 @@ pub fn cube_fluid(
   use salva::object::interaction_groups::InteractionGroups;
 
   Fluid::new(points, particle_rad, density, InteractionGroups::default())
-}
-
-fn fluid_pipeline() -> FluidsPlugin {
-  use salva::integrations::rapier::FluidsPipeline;
-
-  const PARTICLE_RADIUS: f32 = 0.025;
-  const SMOOTHING_FACTOR: f32 = 2.0;
-
-  let mut fluids_pipeline =
-    FluidsPipeline::new(PARTICLE_RADIUS, SMOOTHING_FACTOR);
-
-  let nparticles = 30;
-  let custom_force1 = CustomForceField { origin: Point3::new(1.0, 0.0, 0.0) };
-  let custom_force2 = CustomForceField { origin: Point3::new(-1.0, 0.0, 0.0) };
-  let mut fluid =
-    cube_fluid(nparticles, nparticles, nparticles, PARTICLE_RADIUS, 1000.0);
-  fluid.nonpressure_forces.push(Box::new(custom_force1));
-  fluid.nonpressure_forces.push(Box::new(custom_force2));
-  let _fluid_handle = fluids_pipeline.liquid_world.add_fluid(fluid);
-
-  let mut plugin = FluidsPlugin::new();
-  plugin.set_pipeline(fluids_pipeline);
-  plugin
-}
-
-use nalgebra::{Point3, Unit};
-
-struct CustomForceField {
-  origin: Point3<f32>,
-}
-
-use salva::{
-  object::{Boundary, Fluid},
-  solver::NonPressureForce,
-};
-
-impl NonPressureForce for CustomForceField {
-  fn solve(
-    &mut self,
-    _timestep: &salva::TimestepManager,
-    _kernel_radius: f32,
-    _fluid_fluid_contacts: &salva::geometry::ParticlesContacts,
-    _fluid_boundaries_contacts: &salva::geometry::ParticlesContacts,
-    fluid: &mut Fluid,
-    _boundaries: &[Boundary],
-    _densities: &[f32],
-  ) {
-    for (pos, acc) in fluid.positions.iter().zip(fluid.accelerations.iter_mut())
-    {
-      if let Some((dir, dist)) = Unit::try_new_and_get(self.origin - pos, 0.1) {
-        *acc += *dir / dist;
-      }
-    }
-  }
-
-  fn apply_permutation(&mut self, _permutation: &[usize]) {}
 }

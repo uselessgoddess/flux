@@ -3,37 +3,32 @@ name = "flux"
 version = "0.0.0"
 edition = "2024"
 
-[workspace]
-members = ["crates/harness"]
-
 [dependencies.salva]
 package = "salva3d"
 path = "../salva/build/salva3d"
-features = ["sampling", "rapier-harness"]
+features = ["sampling"]
 
 [dependencies.rapier]
 package = "rapier3d"
 version = "0.23"
 features = ["debug-render", "serde-serialize"]
 
-[dependencies.rapier_testbed3d]
-version = "0.23"
-features = ["parallel"]
-
 [dependencies]
+# bevy
 bevy = { version = "0.16", features = ["serialize"] }
 panorbit_camera = { package = "bevy_panorbit_camera", version = "0.26" }
 
+# physics
 nalgebra = { version = "0.33", features = ["rand", "glam029"] }
-instant = "0.1.13"
 
+instant = { version = "0.1" }
 crossbeam = { version = "0.8", default-features = false, features = ["std", "crossbeam-channel"] }
-bincode = { version = "2.0", features = ["serde"] }
-harness = { path = "crates/harness" }
+num_cpus = { version = "1.17", optional = true }
 
 [features]
 default = ["parallel"]
-parallel = ["harness/parallel"]
+simd = ["rapier/simd-stable"]
+parallel = ["num_cpus", "salva/parallel", "rapier/parallel"]
 
 [profile.dev]
 opt-level = 1

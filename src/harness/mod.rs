@@ -1,9 +1,9 @@
+mod fluids;
 mod harness;
 mod physics;
-mod snapshot;
 
 pub use {
+  fluids::{Boundary, Fluid, Fluids, FluidsSnapshot},
   harness::{Harness, Plugin, RunState},
   physics::{PhysicsEvents, PhysicsState},
-  snapshot::{SharedSnapshot, Snapshot},
 };

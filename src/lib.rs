@@ -2,7 +2,8 @@
 extern crate nalgebra as na;
 
 mod core;
-mod fluid;
+pub mod harness;
+pub mod snapshot;
 pub mod stand;
 
 pub use prelude::*;
@@ -11,7 +12,7 @@ pub mod prelude {
   pub use {
     crate::{
       core::*,
-      fluid::{FluidCallback, FluidsPlugin},
+      harness, snapshot,
       stand::{self, Stand},
     },
     bevy::prelude::*,
@@ -19,6 +20,8 @@ pub mod prelude {
       PanOrbitCamera, PanOrbitCameraPlugin, PanOrbitCameraSystemSet,
     },
   };
+
+  pub type Real = f32;
 }
 
 pub fn app() -> App {
