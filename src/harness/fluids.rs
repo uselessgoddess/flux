@@ -9,12 +9,18 @@ use {
     integrations::rapier::FluidsPipeline,
     object::{BoundaryHandle, FluidHandle},
   },
+  std::time::Duration,
 };
 
 /// A user-defined callback executed at each frame.
 pub type FluidCallback = Box<
-  dyn FnMut(&mut PhysicsState, &PhysicsEvents, &mut FluidsPipeline, &RunState)
-    + Send,
+  dyn FnMut(
+      Duration,
+      &mut PhysicsState,
+      &PhysicsEvents,
+      &mut FluidsPipeline,
+      &RunState,
+    ) + Send,
 >;
 
 impl Default for Fluids {
@@ -25,7 +31,7 @@ impl Default for Fluids {
 
 /// A plugin for rendering fluids with the Rapier harness.
 pub struct Fluids {
-  pipeline: FluidsPipeline,
+  pub pipeline: FluidsPipeline,
   callbacks: Vec<FluidCallback>,
   step_time: f64,
 }
@@ -47,8 +53,13 @@ impl Fluids {
   /// Adds a callback to be executed at each frame.
   pub fn add_callback(
     &mut self,
-    f: impl FnMut(&mut PhysicsState, &PhysicsEvents, &mut FluidsPipeline, &RunState)
-    + Send
+    f: impl FnMut(
+      Duration,
+      &mut PhysicsState,
+      &PhysicsEvents,
+      &mut FluidsPipeline,
+      &RunState,
+    ) + Send
     + 'static,
   ) {
     self.callbacks.push(Box::new(f))
@@ -113,8 +124,9 @@ impl harness::Plugin for Fluids {
     physics_events: &PhysicsEvents,
     run_state: &RunState,
   ) {
+    let delta = Duration::from_secs_f32(physics.integration_parameters.dt);
     for callback in &mut self.callbacks {
-      callback(physics, physics_events, &mut self.pipeline, run_state)
+      callback(delta, physics, physics_events, &mut self.pipeline, run_state)
     }
   }
 
@@ -142,10 +154,8 @@ impl snapshot::Snapshot for FluidsSnapshot {
     for (_, fluid) in fluids.iter() {
       let velocities: Vec<_> =
         fluid.velocities.iter().map(Vector::magnitude).collect();
-      let (min, max) = (
-        velocities.iter().copied().min_by(Real::total_cmp).unwrap(),
-        velocities.iter().copied().max_by(Real::total_cmp).unwrap(),
-      );
+      let max =
+        velocities.iter().copied().min_by(Real::total_cmp).unwrap_or(0.0);
 
       use bevy::math::VectorSpace;
 

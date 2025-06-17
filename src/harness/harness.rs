@@ -72,7 +72,7 @@ pub struct Harness {
   pub physics: PhysicsState,
   max_steps: usize,
   callbacks: Callbacks,
-  events: PhysicsEvents,
+  pub events: PhysicsEvents,
   event_handler: ChannelEventCollector,
 }
 
@@ -135,6 +135,10 @@ impl Harness {
 
   pub fn integration_parameters_mut(&mut self) -> &mut IntegrationParameters {
     &mut self.physics.integration_parameters
+  }
+
+  pub fn delta(&self) -> f32 {
+    self.physics.integration_parameters.dt
   }
 
   pub fn clear_callbacks(&mut self) {
@@ -220,7 +224,7 @@ impl Harness {
     };
 
     #[cfg(feature = "parallel")]
-    self.state.thread_pool.install(|| step());
+    self.state.thread_pool.install(step);
 
     #[cfg(not(feature = "parallel"))]
     step();
@@ -231,7 +235,7 @@ impl Harness {
 
     self.events.poll_all();
 
-    self.state.time += self.physics.integration_parameters.dt as f32;
+    self.state.time += self.physics.integration_parameters.dt;
     self.state.timestep_id += 1;
   }
 

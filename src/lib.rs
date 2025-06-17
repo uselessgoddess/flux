@@ -3,6 +3,7 @@ extern crate nalgebra as na;
 
 mod core;
 pub mod harness;
+pub mod helper;
 pub mod snapshot;
 pub mod stand;
 
@@ -12,8 +13,8 @@ pub mod prelude {
   pub use {
     crate::{
       core::*,
-      harness, snapshot,
-      stand::{self, Stand},
+      harness, helper, snapshot,
+      stand::{self, Frame},
     },
     bevy::prelude::*,
     panorbit_camera::{
