@@ -155,7 +155,7 @@ impl snapshot::Snapshot for FluidsSnapshot {
       let velocities: Vec<_> =
         fluid.velocities.iter().map(Vector::magnitude).collect();
       let max =
-        velocities.iter().copied().min_by(Real::total_cmp).unwrap_or(0.0);
+        velocities.iter().copied().max_by(Real::total_cmp).unwrap_or(f32::MAX);
 
       use bevy::math::VectorSpace;
 

@@ -1,13 +1,18 @@
 use {
-  super::{Sim, Wait},
-  crate::{harness::Fluids, prelude::*},
+  crate::{harness::Fluids, prelude::*, stand::flow::ShapeFlow},
+  parry::shape::Ball,
   salva::{
-    math::Isometry,
-    solver::{Akinci2013SurfaceTension, ArtificialViscosity},
+    math::{Isometry, Vector},
+    object::FluidHandle,
+    parry, solver,
   },
 };
 
-pub fn setup(mut fluids: NonSendMut<Fluids>, mut run: Local<bool>) {
+pub fn setup(
+  mut fluids: NonSendMut<Fluids>,
+  mut commands: Commands,
+  mut run: Local<bool>,
+) {
   if *run {
     return;
   } else {
@@ -17,43 +22,42 @@ pub fn setup(mut fluids: NonSendMut<Fluids>, mut run: Local<bool>) {
   let world = &mut fluids.pipeline.liquid_world;
   let particle_radius = world.particle_radius();
 
-  let surface_tension = Akinci2013SurfaceTension::new(1.0, 0.0);
-  let viscosity = ArtificialViscosity::new(1.5, 1.0);
-  let mut fluid = helper::cube_fluid(7, 7, 7, particle_radius, 1000.0);
+  use solver::{Akinci2013SurfaceTension, ArtificialViscosity, XSPHViscosity};
+
+  let viscosity = XSPHViscosity::new(0.5, 0.5);
+  let mut fluid = helper::cube_fluid(15, 15, 15, particle_radius, 1000.0);
+  fluid.nonpressure_forces.push(Box::new(viscosity));
+  fluid.transform_by(&Isometry::translation(0.0, -5.0, 0.0));
+  fluid.nonpressure_forces.push(Box::new(ArtificialViscosity::new(1.0, 0.0)));
+
+  let _fluid_handle = world.add_fluid(fluid);
+
+  let surface_tension = Akinci2013SurfaceTension::new(0.1, 1.0);
+  let mut fluid = helper::cube_fluid(0, 0, 0, particle_radius, 1000.0);
   fluid.transform_by(&Isometry::translation(0.0, 0.08, 0.0));
   fluid.nonpressure_forces.push(Box::new(surface_tension));
-  fluid.nonpressure_forces.push(Box::new(viscosity));
-  let _fluid_handle = world.add_fluid(fluid);
+  let handle = world.add_fluid(fluid);
+
+  let flow = ShapeFlow::new(
+    Vector::new(-10.0, 0.0, 0.0),
+    &Ball::new(0.2),
+    particle_radius,
+  )
+  .unwrap()
+  .with_velocity(Vector::new(1.0, 1.0, 0.0) * 5.0);
+  commands.spawn(Inflow { flow, handle });
 }
 
-pub fn update(
-  mut fluids: NonSendMut<Fluids>,
-  mut timer: ResMut<Wait>,
-  time: Res<Time<Sim>>,
-) {
+#[derive(Component)]
+pub struct Inflow {
+  flow: ShapeFlow,
+  handle: FluidHandle,
+}
+
+pub fn update(flows: Query<&Inflow>, mut fluids: NonSendMut<Fluids>) {
   let world = &mut fluids.pipeline.liquid_world;
-  let particle_radius = world.particle_radius();
 
-  if timer.tick(time.delta()).just_finished() {
-    use salva::solver::{Becker2009Elasticity, XSPHViscosity};
-
-    let elasticity: Becker2009Elasticity =
-      Becker2009Elasticity::new(500_000.0, 0.3, true);
-    let viscosity = XSPHViscosity::new(0.5, 1.0);
-
-    let amount = 30;
-
-    let mut fluid =
-      helper::cube_fluid(amount, amount, amount, particle_radius, 1000.0);
-    fluid.nonpressure_forces.push(Box::new(elasticity));
-    fluid.nonpressure_forces.push(Box::new(viscosity));
-    fluid.transform_by(&Isometry::translation(
-      0.0,
-      amount as f32 * particle_radius,
-      0.0,
-    ));
-    fluid.nonpressure_forces.push(Box::new(ArtificialViscosity::new(1.0, 0.0)));
-
-    let _fluid_handle = fluids.pipeline.liquid_world.add_fluid(fluid);
+  for &Inflow { ref flow, handle } in flows.iter() {
+    flow.emit(world, handle);
   }
 }

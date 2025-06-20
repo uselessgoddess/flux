@@ -1,3 +1,4 @@
+mod flow;
 mod tick;
 
 use {
@@ -17,6 +18,18 @@ pub struct Step;
 #[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, AppLabel)]
 struct FluidApp;
 
+#[derive(Resource)]
+struct FluidState {
+  timer: Timer,
+  pause: bool,
+}
+
+impl Default for FluidState {
+  fn default() -> Self {
+    Self { timer: Timer::from_seconds(1.0, TimerMode::Once), pause: false }
+  }
+}
+
 pub fn plugin(app: &mut App, harness: Harness, fluids: Fluids) {
   let mut sub_app = SubApp::new();
   sub_app.update_schedule = Some(Step.intern());
@@ -28,13 +41,25 @@ pub fn plugin(app: &mut App, harness: Harness, fluids: Fluids) {
     {
       timeline.snapshots.push(frame);
     }
+
+    if let Some(input) = main.get_resource::<ButtonInput<KeyCode>>()
+      && let Some(mut state) = sub.get_resource_mut::<FluidState>()
+      && input.just_pressed(KeyCode::KeyP)
+    {
+      state.pause = !state.pause;
+    }
   });
   sub_app.world_mut().insert_non_send_resource(harness);
   sub_app.world_mut().insert_non_send_resource(fluids);
   sub_app
     .init_resource::<Time<Sim>>()
-    .insert_resource(Wait(Timer::from_seconds(1.0, TimerMode::Once)))
-    .add_systems(Step, (tick::setup, step, tick::update).chain());
+    .init_resource::<FluidState>()
+    .add_systems(
+      Step,
+      (tick::setup, step, tick::update)
+        .chain()
+        .run_if(move |state: Res<FluidState>| !state.pause),
+    );
 
   app.insert_sub_app(FluidApp, sub_app);
   app.init_resource::<Timeline>().add_systems(Update, draw);
@@ -42,9 +67,6 @@ pub fn plugin(app: &mut App, harness: Harness, fluids: Fluids) {
 
 #[derive(Default)]
 struct Sim;
-
-#[derive(Resource, Deref, DerefMut)]
-struct Wait(Timer);
 
 fn step(
   harness: NonSendMut<Harness>,
